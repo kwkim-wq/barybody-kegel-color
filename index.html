@@ -225,7 +225,7 @@
   </div>
 
   <div id="loading"><div class="spinner"></div><p id="loading-text">3D 모델 불러오는 중...</p></div>
-  <div id="hint">드래그: 회전 · 스크롤: 줌 · 우클릭드래그: 이동 &nbsp;|&nbsp; 뷰 전환: 1 정면 · 2 위 · 3 우측 · 4 후면 · 5 좌측 · 6 입체</div>
+  <div id="hint">드래그: 회전 · 스크롤: 줌 · 우클릭드래그: 이동 &nbsp;|&nbsp; 뷰(CAD 동일): 1 정면 · 2 위 · 3 우측 · 4 후면 · 5 아래 · 6 좌측 · 0 입체</div>
   <div id="toast"></div>
 
   <script src="pantone.js"></script>
@@ -703,13 +703,15 @@
       // 입력창에 포커스 있을 때는 무시
       const tag = (document.activeElement && document.activeElement.tagName) || '';
       if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+      // FreeCAD 표준 뷰 매핑
       switch (e.code) {
-        case 'Digit1': case 'Numpad1': setView([0, 0.15, 1]);   toast('정면'); break;
-        case 'Digit2': case 'Numpad2': setView([0, 1, 0.001]);  toast('위'); break;
-        case 'Digit3': case 'Numpad3': setView([1, 0.15, 0]);   toast('우측면'); break;
-        case 'Digit4': case 'Numpad4': setView([0, 0.15, -1]);  toast('후면'); break;
-        case 'Digit5': case 'Numpad5': setView([-1, 0.15, 0]);  toast('좌측면'); break;
-        case 'Digit6': case 'Numpad6': setView([0.9, 0.7, 0.9]); toast('아이소메트릭'); break;
+        case 'Digit1': case 'Numpad1': setView([0, 0.001, 1]);   toast('① 정면'); break;
+        case 'Digit2': case 'Numpad2': setView([0, 1, 0.001]);   toast('② 위'); break;
+        case 'Digit3': case 'Numpad3': setView([1, 0.001, 0]);   toast('③ 우측'); break;
+        case 'Digit4': case 'Numpad4': setView([0, 0.001, -1]);  toast('④ 후면'); break;
+        case 'Digit5': case 'Numpad5': setView([0, -1, 0.001]);  toast('⑤ 아래'); break;
+        case 'Digit6': case 'Numpad6': setView([-1, 0.001, 0]);  toast('⑥ 좌측'); break;
+        case 'Digit0': case 'Numpad0': setView([0.9, 0.7, 0.9]); toast('⓪ 입체'); break;
       }
     });
 
