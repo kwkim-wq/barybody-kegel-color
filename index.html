@@ -229,6 +229,7 @@
   <div id="toast"></div>
 
   <script src="pantone.js"></script>
+  <script src="partnames.js"></script>
   <script type="importmap">
   { "imports": {
       "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
@@ -549,7 +550,17 @@
       try {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (!raw) return 0;
-        const data = JSON.parse(raw);
+        let data = JSON.parse(raw);
+        // 이전 자동이름(P000_...) 으로 저장된 작업을 실제 CAD 파트명으로 1회 이전
+        if (window.NAME_MIGRATION) {
+          const migrated = {};
+          let didMigrate = false;
+          Object.keys(data).forEach(k => {
+            if (window.NAME_MIGRATION[k]) { migrated[window.NAME_MIGRATION[k]] = data[k]; didMigrate = true; }
+            else { migrated[k] = data[k]; }
+          });
+          if (didMigrate) { data = migrated; localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
+        }
         let n = 0;
         parts.forEach(m => {
           const a = data[m.userData.partName];
@@ -586,12 +597,14 @@
       const stamp = `${ts.getFullYear()}${pad(ts.getMonth()+1)}${pad(ts.getDate())}_${pad(ts.getHours())}${pad(ts.getMinutes())}`;
 
       // CSV
-      let csv = '﻿파트명,색상입력방식,HEX,R,G,B,팬톤코드\n';
+      const baseMap = window.PART_BASENAME || {};
+      let csv = '﻿파트명,원본파트명,색상입력방식,HEX,R,G,B,팬톤코드\n';
       applied.forEach(m => {
         const a = m.userData.applied;
         const rgb = hexToRgb(a.hex);
         const pant = a.method === 'PANTONE' ? a.meta.replace('PANTONE ','') : '';
-        csv += `${m.userData.partName},${a.method},${a.hex},${rgb.r},${rgb.g},${rgb.b},${pant}\n`;
+        const base = baseMap[m.userData.partName] || m.userData.partName;
+        csv += `${m.userData.partName},${base},${a.method},${a.hex},${rgb.r},${rgb.g},${rgb.b},${pant}\n`;
       });
       downloadFile(csv, `케겔운동기구_컬러명세_${stamp}.csv`, 'text/csv');
 
