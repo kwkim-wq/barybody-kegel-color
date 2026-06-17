@@ -172,6 +172,7 @@
       <div class="input-block" data-block="pantone">
         <label class="fld">팬톤 종류</label>
         <select id="pantone-cat">
+          <option value="ALL">전체 (모든 체계에서 검색)</option>
           <option value="C">Coated (C) — 코팅지</option>
           <option value="U">Uncoated (U) — 비코팅지</option>
           <option value="Metallic">Metallic — 메탈릭</option>
@@ -423,7 +424,9 @@
     const pantInput = document.getElementById('pantone-input');
     const pantResults = document.getElementById('pantone-results');
     const pantCat = document.getElementById('pantone-cat');
-    const CAT_PLACEHOLDER = { 'C':'185 C', 'U':'185 U', 'Metallic':'871 C', 'Pastel/Neon':'Yellow 0131 C', 'Skin':'Skin 1', 'TPX/TCX':'19-4052 / Egret' };
+    const CAT_PLACEHOLDER = { 'ALL':'185 C / 19-4052 / Egret', 'C':'185 C', 'U':'185 U', 'Metallic':'871 C', 'Pastel/Neon':'Yellow 0131 C', 'Skin':'Skin 1', 'TPX/TCX':'19-4052 / Egret' };
+    const CAT_LABEL = { 'C':'C', 'U':'U', 'Metallic':'Metallic', 'Pastel/Neon':'Pastel', 'Skin':'Skin', 'TPX/TCX':'TCX' };
+    const CAT_COLOR = { 'C':'#5aa9ff', 'U':'#9b8cff', 'Metallic':'#d4a843', 'Pastel/Neon':'#ff8ac4', 'Skin':'#ff9d6b', 'TPX/TCX':'#46c98a' };
 
     function runPantoneSearch() {
       const cat = pantCat.value;
@@ -431,17 +434,34 @@
       pantResults.innerHTML = '';
       if (!q) return;
       const qNoSpace = q.replace(/\s/g,'');
-      const list = (window.PANTONE_DB && window.PANTONE_DB[cat]) || [];
-      const matches = list.filter(p => {
-        const code = p.code.toUpperCase();
-        const name = (p.name||'').toUpperCase();
-        return code.includes(q) || code.replace(/\s/g,'').includes(qNoSpace) || name.includes(q);
-      }).slice(0, 40);
+      const DB = window.PANTONE_DB || {};
+      // 검색 대상 카테고리: ALL이면 전부, 아니면 선택된 하나
+      const cats = (cat === 'ALL') ? Object.keys(DB) : [cat];
+      let matches = [];
+      cats.forEach(c => {
+        (DB[c] || []).forEach(p => {
+          const code = p.code.toUpperCase();
+          const name = (p.name||'').toUpperCase();
+          if (code.includes(q) || code.replace(/\s/g,'').includes(qNoSpace) || name.includes(q)) {
+            matches.push({ ...p, _cat: c });
+          }
+        });
+      });
+      // 정확히 일치하는 코드를 위로
+      matches.sort((a,b) => {
+        const ae = a.code.replace(/\s/g,'') === qNoSpace ? 0 : 1;
+        const be = b.code.replace(/\s/g,'') === qNoSpace ? 0 : 1;
+        return ae - be;
+      });
+      matches = matches.slice(0, 60);
       matches.forEach(p => {
         const el = document.createElement('div');
         el.className = 'pant-item';
         const nm = p.name ? `<span style="color:rgba(255,255,255,0.4);font-size:10px">&nbsp;${p.name}</span>` : '';
-        el.innerHTML = `<div class="pant-sw" style="background:${p.hex}"></div><div class="pant-code">PANTONE ${p.code}${nm}</div><div class="pant-hex">${p.hex}</div>`;
+        // ALL 검색일 때만 체계 뱃지 표시
+        const badge = (cat === 'ALL')
+          ? `<span style="font-size:9px;background:${CAT_COLOR[p._cat]};color:#0a0a0a;font-weight:700;padding:1px 5px;border-radius:4px;margin-right:6px">${CAT_LABEL[p._cat]}</span>` : '';
+        el.innerHTML = `<div class="pant-sw" style="background:${p.hex}"></div><div class="pant-code">${badge}PANTONE ${p.code}${nm}</div><div class="pant-hex">${p.hex}</div>`;
         el.addEventListener('click', () => {
           setPreview(p.hex, 'PANTONE', `PANTONE ${p.code}`);
           pantInput.value = `PANTONE ${p.code}`;
