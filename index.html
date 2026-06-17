@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>케겔운동기구 — 컬러 작업 뷰어</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #15171c; font-family: 'Helvetica Neue', -apple-system, 'Apple SD Gothic Neo', sans-serif; overflow: hidden; color: #fff; }
+    #canvas-container { width: 100vw; height: 100vh; }
+    canvas { display: block; }
+
+    /* ── 상단 안내 ── */
+    #topbar {
+      position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
+      background: rgba(255,255,255,0.07); backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,0.13); border-radius: 10px;
+      padding: 8px 18px; text-align: center; pointer-events: none; z-index: 5;
+    }
+    #topbar h1 { font-size: 13px; font-weight: 600; letter-spacing: 0.02em; }
+    #topbar p { font-size: 11px; color: rgba(255,255,255,0.5); margin-top: 2px; }
+
+    /* ── 우측 컬러 패널 ── */
+    #panel {
+      position: fixed; top: 0; right: 0; width: 320px; height: 100vh;
+      background: rgba(24,26,32,0.94); backdrop-filter: blur(16px);
+      border-left: 1px solid rgba(255,255,255,0.1);
+      display: flex; flex-direction: column; z-index: 10;
+      box-shadow: -8px 0 30px rgba(0,0,0,0.3);
+    }
+    .panel-section { padding: 16px 18px; border-bottom: 1px solid rgba(255,255,255,0.07); }
+    .panel-section h2 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(255,255,255,0.4); margin-bottom: 10px; }
+
+    #selected-info { font-size: 13px; color: rgba(255,255,255,0.85); min-height: 20px; }
+    #selected-info .none { color: rgba(255,255,255,0.35); }
+    #selected-count { font-size: 11px; color: #6db3ff; margin-top: 4px; }
+
+    /* 입력 방식 탭 */
+    .mode-tabs { display: flex; gap: 4px; margin-bottom: 12px; }
+    .mode-tab {
+      flex: 1; padding: 6px 0; text-align: center; font-size: 11px;
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 6px; cursor: pointer; color: rgba(255,255,255,0.55); transition: all 0.15s;
+    }
+    .mode-tab.active { background: #2f6fed; border-color: #2f6fed; color: #fff; font-weight: 600; }
+    .mode-tab:hover:not(.active) { background: rgba(255,255,255,0.12); }
+
+    .input-block { display: none; }
+    .input-block.active { display: block; }
+
+    label.fld { display: block; font-size: 10px; color: rgba(255,255,255,0.45); margin: 8px 0 3px; }
+    input[type=text], input[type=number] {
+      width: 100%; padding: 8px 10px; font-size: 13px;
+      background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.13);
+      border-radius: 6px; color: #fff; outline: none; font-family: inherit;
+    }
+    input:focus { border-color: #2f6fed; }
+    .rgb-row { display: flex; gap: 6px; }
+    .rgb-row input { text-align: center; }
+
+    input[type=color] {
+      width: 100%; height: 46px; border: 1px solid rgba(255,255,255,0.13);
+      border-radius: 6px; background: transparent; cursor: pointer; padding: 3px;
+    }
+    select#pantone-cat {
+      width: 100%; padding: 8px 10px; font-size: 12px; margin-bottom: 2px;
+      background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.13);
+      border-radius: 6px; color: #fff; outline: none; font-family: inherit; cursor: pointer;
+    }
+    select#pantone-cat option { background: #22252c; color: #fff; }
+
+    /* 팬톤 검색결과 */
+    #pantone-results { max-height: 180px; overflow-y: auto; margin-top: 6px; }
+    .pant-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 5px; cursor: pointer; }
+    .pant-item:hover { background: rgba(255,255,255,0.1); }
+    .pant-sw { width: 22px; height: 22px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); flex-shrink: 0; }
+    .pant-code { font-size: 12px; }
+    .pant-hex { font-size: 10px; color: rgba(255,255,255,0.4); margin-left: auto; }
+
+    /* 미리보기 + 적용 */
+    #preview-row { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+    #preview-sw { width: 40px; height: 40px; border-radius: 8px; border: 2px solid rgba(255,255,255,0.25); background: #cccccc; flex-shrink: 0; }
+    #preview-hex { font-size: 13px; font-family: monospace; }
+    #preview-meta { font-size: 10px; color: rgba(255,255,255,0.4); }
+
+    button.apply {
+      width: 100%; margin-top: 12px; padding: 11px; font-size: 13px; font-weight: 600;
+      background: #2f6fed; color: #fff; border: none; border-radius: 7px; cursor: pointer; transition: background 0.15s;
+    }
+    button.apply:hover { background: #2560d8; }
+    button.apply:disabled { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.3); cursor: not-allowed; }
+
+    .btn-row { display: flex; gap: 6px; margin-top: 8px; }
+    button.sec {
+      flex: 1; padding: 8px; font-size: 11px; background: rgba(255,255,255,0.08);
+      color: rgba(255,255,255,0.8); border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; cursor: pointer;
+    }
+    button.sec:hover { background: rgba(255,255,255,0.15); }
+
+    /* 적용된 파트 리스트 */
+    #applied-section { flex: 1; overflow-y: auto; }
+    #applied-list { display: flex; flex-direction: column; gap: 4px; }
+    .applied-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: rgba(255,255,255,0.04); border-radius: 5px; font-size: 12px; }
+    .applied-item .sw { width: 18px; height: 18px; border-radius: 3px; border: 1px solid rgba(255,255,255,0.2); flex-shrink: 0; cursor: pointer; }
+    .applied-item .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .applied-item .cc { font-size: 10px; color: rgba(255,255,255,0.45); font-family: monospace; }
+    .applied-item .del { color: rgba(255,255,255,0.3); cursor: pointer; padding: 0 4px; }
+    .applied-item .del:hover { color: #ff6b6b; }
+    #applied-empty { font-size: 11px; color: rgba(255,255,255,0.3); text-align: center; padding: 20px 0; }
+
+    /* 저장 버튼 */
+    #export-section { padding: 14px 18px; border-top: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2); }
+    button.export {
+      width: 100%; padding: 12px; font-size: 13px; font-weight: 700;
+      background: #1ca672; color: #fff; border: none; border-radius: 7px; cursor: pointer; margin-bottom: 6px;
+    }
+    button.export:hover { background: #18915f; }
+
+    /* 로딩 */
+    #loading { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); text-align: center; z-index: 20; }
+    #loading .spinner { width: 36px; height: 36px; border: 2.5px solid rgba(255,255,255,0.2); border-top-color: #fff; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #loading p { font-size: 13px; color: rgba(255,255,255,0.6); }
+
+    /* 하단 좌측 힌트 */
+    #hint { position: fixed; bottom: 14px; left: 14px; font-size: 11px; color: rgba(255,255,255,0.4); background: rgba(0,0,0,0.3); padding: 6px 12px; border-radius: 6px; z-index: 5; }
+    #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #1ca672; color: #fff; padding: 10px 20px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity 0.3s; z-index: 30; pointer-events: none; }
+    #toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+  <div id="canvas-container"></div>
+
+  <div id="topbar">
+    <h1>케겔운동기구 — 컬러 작업</h1>
+    <p>파트 클릭 → 색상 선택 → 적용 &nbsp;|&nbsp; Shift+클릭: 여러 파트 동시 선택</p>
+  </div>
+
+  <div id="panel">
+    <!-- 선택된 파트 -->
+    <div class="panel-section">
+      <h2>선택된 파트</h2>
+      <div id="selected-info"><span class="none">3D에서 파트를 클릭하세요</span></div>
+      <div id="selected-count"></div>
+    </div>
+
+    <!-- 컬러 입력 -->
+    <div class="panel-section">
+      <h2>색상 지정</h2>
+      <div class="mode-tabs">
+        <div class="mode-tab active" data-mode="picker">컬러픽커</div>
+        <div class="mode-tab" data-mode="hex">HEX</div>
+        <div class="mode-tab" data-mode="rgb">RGB</div>
+        <div class="mode-tab" data-mode="pantone">팬톤</div>
+      </div>
+
+      <div class="input-block active" data-block="picker">
+        <input type="color" id="picker" value="#cccccc">
+      </div>
+      <div class="input-block" data-block="hex">
+        <label class="fld">HEX 코드</label>
+        <input type="text" id="hex-input" placeholder="#FF5733" maxlength="7">
+      </div>
+      <div class="input-block" data-block="rgb">
+        <label class="fld">R / G / B (0–255)</label>
+        <div class="rgb-row">
+          <input type="number" id="rgb-r" placeholder="R" min="0" max="255">
+          <input type="number" id="rgb-g" placeholder="G" min="0" max="255">
+          <input type="number" id="rgb-b" placeholder="B" min="0" max="255">
+        </div>
+      </div>
+      <div class="input-block" data-block="pantone">
+        <label class="fld">팬톤 종류</label>
+        <select id="pantone-cat">
+          <option value="C">Coated (C) — 코팅지</option>
+          <option value="U">Uncoated (U) — 비코팅지</option>
+          <option value="Metallic">Metallic — 메탈릭</option>
+          <option value="Pastel/Neon">Pastel / Neon</option>
+          <option value="Skin">Skin — 스킨톤</option>
+          <option value="TPX/TCX">TPX / TCX — 패션/홈</option>
+        </select>
+        <label class="fld">코드 / 이름 검색 (예: 185, 19-4052, Egret)</label>
+        <input type="text" id="pantone-input" placeholder="185 C">
+        <div id="pantone-results"></div>
+      </div>
+
+      <div id="preview-row">
+        <div id="preview-sw"></div>
+        <div>
+          <div id="preview-hex">#CCCCCC</div>
+          <div id="preview-meta"></div>
+        </div>
+      </div>
+
+      <button class="apply" id="apply-btn" disabled>선택한 파트에 적용</button>
+      <div class="btn-row">
+        <button class="sec" id="select-all-btn">전체 선택</button>
+        <button class="sec" id="reset-part-btn">선택 파트 초기화</button>
+      </div>
+    </div>
+
+    <!-- 적용된 컬러 목록 -->
+    <div class="panel-section" id="applied-section">
+      <h2>적용된 컬러 <span id="applied-num" style="color:#6db3ff"></span></h2>
+      <div id="applied-list"></div>
+      <div id="applied-empty">아직 적용된 색상이 없습니다</div>
+    </div>
+
+    <!-- 저장 -->
+    <div id="export-section">
+      <button class="export" id="export-btn">💾 컬러 명세 저장 (생산업체용)</button>
+      <div class="btn-row">
+        <button class="sec" id="screenshot-btn">📷 스크린샷</button>
+        <button class="sec" id="reset-all-btn">전체 초기화</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="loading"><div class="spinner"></div><p id="loading-text">3D 모델 불러오는 중...</p></div>
+  <div id="hint">드래그: 회전 · 스크롤: 줌 · 우클릭드래그: 이동</div>
+  <div id="toast"></div>
+
+  <script src="pantone.js"></script>
+  <script type="importmap">
+  { "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
+  } }
+  </script>
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+    import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+
+    // ───── Scene ─────
+    const container = document.getElementById('canvas-container');
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.1;
+    container.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x15171c);
+
+    const PANEL_W = 320;
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.01, 100);
+    camera.position.set(3, 2, 4);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.06;
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.85));
+    const key = new THREE.DirectionalLight(0xffffff, 2.2); key.position.set(4, 6, 4); scene.add(key);
+    const fill = new THREE.DirectionalLight(0xc8d8ff, 0.7); fill.position.set(-4, 2, -3); scene.add(fill);
+    const rim = new THREE.DirectionalLight(0xffffff, 0.5); rim.position.set(0, -3, -4); scene.add(rim);
+    const grid = new THREE.GridHelper(14, 28, 0x333740, 0x24272e); scene.add(grid);
+
+    function fitViewport() {
+      const w = window.innerWidth, h = window.innerHeight;
+      renderer.setSize(w, h);
+      camera.aspect = w / h;   // 캔버스는 전체 창이므로 종횡비도 전체 기준 (왜곡 방지)
+      camera.updateProjectionMatrix();
+      // 패널(우측 320px)을 피해 모델을 보이는 영역 중앙으로 이동 (종횡비 왜곡 없음)
+      camera.setViewOffset(w, h, PANEL_W / 2, 0, w, h);
+    }
+    window.addEventListener('resize', fitViewport);
+
+    // ───── Load model ─────
+    const draco = new DRACOLoader();
+    draco.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/libs/draco/');
+    const loader = new GLTFLoader();
+    loader.setDRACOLoader(draco);
+
+    const parts = [];          // {mesh, name, baseMat}
+    const DEFAULT_COLOR = 0xc7c7cc;
+    let modelHeight = 2;
+
+    loader.load('ski.glb', (gltf) => {
+      const model = gltf.scene;
+      model.traverse(n => {
+        if (n.isMesh) {
+          const mat = new THREE.MeshStandardMaterial({ color: DEFAULT_COLOR, metalness: 0.1, roughness: 0.55 });
+          n.material = mat;
+          n.userData.partName = n.name;
+          n.userData.applied = null;  // {hex, method, label}
+          parts.push(n);
+        }
+      });
+      // CAD Z-up → Three.js Y-up
+      model.rotation.x = -Math.PI / 2;
+      scene.add(model);
+
+      // normalize (bbox 계산은 회전 적용 후)
+      const box = new THREE.Box3().setFromObject(model);
+      const size = box.getSize(new THREE.Vector3());
+      const maxDim = Math.max(size.x, size.y, size.z);
+      const scale = 3.0 / maxDim;
+      model.scale.setScalar(scale);
+      box.setFromObject(model);
+      const c2 = box.getCenter(new THREE.Vector3());
+      const size2 = box.getSize(new THREE.Vector3());
+      model.position.x -= c2.x; model.position.z -= c2.z;
+      model.position.y -= box.min.y;   // 바닥(min.y)을 y=0에 붙이기
+      grid.position.y = 0;
+      modelHeight = size2.y;
+      const scaledMax = Math.max(size2.x, size2.y, size2.z);
+      controls.target.set(0, size2.y * 0.45, 0);
+      camera.position.set(size2.x * 0.7, size2.y * 1.2, scaledMax * 1.4);
+      controls.update();
+
+      document.getElementById('loading').style.display = 'none';
+      toast(`${parts.length}개 파트 로드 완료`);
+    }, (xhr) => {
+      if (xhr.total) document.getElementById('loading-text').textContent =
+        `불러오는 중... ${Math.round(xhr.loaded/xhr.total*100)}%`;
+    }, (err) => {
+      document.getElementById('loading-text').textContent = 'GLB 로드 실패';
+      console.error(err);
+    });
+
+    // ───── Selection ─────
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    let selected = new Set();   // meshes
+    const SEL_EMISSIVE = 0x2f6fed;
+
+    renderer.domElement.addEventListener('pointerdown', onPointerDown);
+    let downPos = null;
+    function onPointerDown(e) { downPos = {x:e.clientX, y:e.clientY, shift:e.shiftKey}; }
+    renderer.domElement.addEventListener('pointerup', (e) => {
+      if (!downPos) return;
+      const moved = Math.abs(e.clientX-downPos.x) + Math.abs(e.clientY-downPos.y);
+      if (moved > 5) { downPos = null; return; }  // drag, not click
+      if (e.clientX > window.innerWidth - PANEL_W) return; // over panel
+
+      mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+      raycaster.setFromCamera(mouse, camera);
+      const hits = raycaster.intersectObjects(parts, false);
+      if (hits.length) {
+        const m = hits[0].object;
+        if (!downPos.shift) clearSelection();
+        if (selected.has(m)) { deselect(m); } else { select(m); }
+        updateSelectedInfo();
+      } else if (!downPos.shift) {
+        clearSelection(); updateSelectedInfo();
+      }
+      downPos = null;
+    });
+
+    function select(m) { selected.add(m); m.material.emissive = new THREE.Color(SEL_EMISSIVE); m.material.emissiveIntensity = 0.35; }
+    function deselect(m) { selected.delete(m); m.material.emissive = new THREE.Color(0x000000); }
+    function clearSelection() { selected.forEach(m => m.material.emissive = new THREE.Color(0x000000)); selected.clear(); }
+
+    function updateSelectedInfo() {
+      const info = document.getElementById('selected-info');
+      const cnt = document.getElementById('selected-count');
+      const applyBtn = document.getElementById('apply-btn');
+      if (selected.size === 0) {
+        info.innerHTML = '<span class="none">3D에서 파트를 클릭하세요</span>';
+        cnt.textContent = ''; applyBtn.disabled = true;
+      } else if (selected.size === 1) {
+        const m = [...selected][0];
+        info.textContent = m.userData.partName;
+        cnt.textContent = ''; applyBtn.disabled = false;
+      } else {
+        info.textContent = `${selected.size}개 파트 선택됨`;
+        cnt.textContent = [...selected].map(m=>m.userData.partName).join(', ').slice(0,80) + '...';
+        applyBtn.disabled = false;
+      }
+    }
+
+    // ───── Color input handling ─────
+    let currentColor = '#CCCCCC';
+    let currentMethod = 'HEX';   // method label for export
+    let currentMeta = '';        // e.g. pantone code
+
+    const previewSw = document.getElementById('preview-sw');
+    const previewHex = document.getElementById('preview-hex');
+    const previewMeta = document.getElementById('preview-meta');
+
+    function setPreview(hex, method, meta) {
+      currentColor = hex.toUpperCase();
+      currentMethod = method;
+      currentMeta = meta || '';
+      previewSw.style.background = currentColor;
+      previewHex.textContent = currentColor;
+      const rgb = hexToRgb(currentColor);
+      previewMeta.textContent = meta ? `${meta} · RGB(${rgb.r},${rgb.g},${rgb.b})` : `RGB(${rgb.r},${rgb.g},${rgb.b})`;
+    }
+
+    // mode tabs
+    document.querySelectorAll('.mode-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.mode-tab').forEach(t=>t.classList.remove('active'));
+        document.querySelectorAll('.input-block').forEach(b=>b.classList.remove('active'));
+        tab.classList.add('active');
+        document.querySelector(`.input-block[data-block="${tab.dataset.mode}"]`).classList.add('active');
+      });
+    });
+
+    // picker
+    document.getElementById('picker').addEventListener('input', (e) => setPreview(e.target.value, 'HEX', ''));
+    // hex
+    document.getElementById('hex-input').addEventListener('input', (e) => {
+      let v = e.target.value.trim();
+      if (!v.startsWith('#')) v = '#' + v;
+      if (/^#[0-9a-fA-F]{6}$/.test(v)) setPreview(v, 'HEX', '');
+    });
+    // rgb
+    ['rgb-r','rgb-g','rgb-b'].forEach(id => document.getElementById(id).addEventListener('input', () => {
+      const r = clamp255(document.getElementById('rgb-r').value);
+      const g = clamp255(document.getElementById('rgb-g').value);
+      const b = clamp255(document.getElementById('rgb-b').value);
+      setPreview(rgbToHex(r,g,b), 'RGB', `RGB(${r},${g},${b})`);
+    }));
+    // pantone
+    const pantInput = document.getElementById('pantone-input');
+    const pantResults = document.getElementById('pantone-results');
+    const pantCat = document.getElementById('pantone-cat');
+    const CAT_PLACEHOLDER = { 'C':'185 C', 'U':'185 U', 'Metallic':'871 C', 'Pastel/Neon':'Yellow 0131 C', 'Skin':'Skin 1', 'TPX/TCX':'19-4052 / Egret' };
+
+    function runPantoneSearch() {
+      const cat = pantCat.value;
+      const q = pantInput.value.trim().toUpperCase().replace(/\s+/g,' ');
+      pantResults.innerHTML = '';
+      if (!q) return;
+      const qNoSpace = q.replace(/\s/g,'');
+      const list = (window.PANTONE_DB && window.PANTONE_DB[cat]) || [];
+      const matches = list.filter(p => {
+        const code = p.code.toUpperCase();
+        const name = (p.name||'').toUpperCase();
+        return code.includes(q) || code.replace(/\s/g,'').includes(qNoSpace) || name.includes(q);
+      }).slice(0, 40);
+      matches.forEach(p => {
+        const el = document.createElement('div');
+        el.className = 'pant-item';
+        const nm = p.name ? `<span style="color:rgba(255,255,255,0.4);font-size:10px">&nbsp;${p.name}</span>` : '';
+        el.innerHTML = `<div class="pant-sw" style="background:${p.hex}"></div><div class="pant-code">PANTONE ${p.code}${nm}</div><div class="pant-hex">${p.hex}</div>`;
+        el.addEventListener('click', () => {
+          setPreview(p.hex, 'PANTONE', `PANTONE ${p.code}`);
+          pantInput.value = `PANTONE ${p.code}`;
+          pantResults.innerHTML = '';
+        });
+        pantResults.appendChild(el);
+      });
+      if (!matches.length) pantResults.innerHTML = '<div style="font-size:11px;color:rgba(255,255,255,0.35);padding:6px">검색 결과 없음</div>';
+    }
+    pantInput.addEventListener('input', runPantoneSearch);
+    pantCat.addEventListener('change', () => { pantInput.placeholder = CAT_PLACEHOLDER[pantCat.value]; runPantoneSearch(); });
+
+    // ───── Apply ─────
+    document.getElementById('apply-btn').addEventListener('click', () => {
+      if (!selected.size) return;
+      const col = new THREE.Color(currentColor);
+      selected.forEach(m => {
+        m.material.color = col.clone();
+        m.userData.applied = { hex: currentColor, method: currentMethod, meta: currentMeta };
+      });
+      clearSelection(); updateSelectedInfo();
+      renderAppliedList();
+      toast('색상 적용됨');
+    });
+
+    document.getElementById('select-all-btn').addEventListener('click', () => {
+      clearSelection(); parts.forEach(select); updateSelectedInfo();
+    });
+    document.getElementById('reset-part-btn').addEventListener('click', () => { clearSelection(); updateSelectedInfo(); });
+
+    document.getElementById('reset-all-btn').addEventListener('click', () => {
+      if (!confirm('모든 색상을 초기화할까요?')) return;
+      parts.forEach(m => { m.material.color = new THREE.Color(DEFAULT_COLOR); m.userData.applied = null; });
+      clearSelection(); updateSelectedInfo(); renderAppliedList(); toast('전체 초기화됨');
+    });
+
+    // ───── Applied list ─────
+    function renderAppliedList() {
+      const list = document.getElementById('applied-list');
+      const empty = document.getElementById('applied-empty');
+      const num = document.getElementById('applied-num');
+      list.innerHTML = '';
+      const applied = parts.filter(m => m.userData.applied);
+      num.textContent = applied.length ? `(${applied.length})` : '';
+      if (!applied.length) { empty.style.display = 'block'; return; }
+      empty.style.display = 'none';
+      applied.forEach(m => {
+        const a = m.userData.applied;
+        const el = document.createElement('div');
+        el.className = 'applied-item';
+        const label = a.method === 'PANTONE' ? a.meta : a.hex;
+        el.innerHTML = `<div class="sw" style="background:${a.hex}"></div>
+          <div class="nm" title="${m.userData.partName}">${m.userData.partName}</div>
+          <div class="cc">${label}</div>
+          <div class="del">✕</div>`;
+        el.querySelector('.sw').addEventListener('click', () => { clearSelection(); select(m); updateSelectedInfo(); focusPart(m); });
+        el.querySelector('.del').addEventListener('click', () => {
+          m.material.color = new THREE.Color(DEFAULT_COLOR); m.userData.applied = null; renderAppliedList();
+        });
+        list.appendChild(el);
+      });
+    }
+
+    function focusPart(m) {
+      const box = new THREE.Box3().setFromObject(m);
+      const c = box.getCenter(new THREE.Vector3());
+      controls.target.copy(c);
+      controls.update();
+    }
+
+    // ───── Export spec ─────
+    document.getElementById('export-btn').addEventListener('click', exportSpec);
+    function exportSpec() {
+      const applied = parts.filter(m => m.userData.applied);
+      if (!applied.length) { toast('적용된 색상이 없습니다'); return; }
+      const ts = new Date();
+      const stamp = `${ts.getFullYear()}${pad(ts.getMonth()+1)}${pad(ts.getDate())}_${pad(ts.getHours())}${pad(ts.getMinutes())}`;
+
+      // CSV
+      let csv = '﻿파트명,색상입력방식,HEX,R,G,B,팬톤코드\n';
+      applied.forEach(m => {
+        const a = m.userData.applied;
+        const rgb = hexToRgb(a.hex);
+        const pant = a.method === 'PANTONE' ? a.meta.replace('PANTONE ','') : '';
+        csv += `${m.userData.partName},${a.method},${a.hex},${rgb.r},${rgb.g},${rgb.b},${pant}\n`;
+      });
+      downloadFile(csv, `케겔운동기구_컬러명세_${stamp}.csv`, 'text/csv');
+
+      // JSON
+      const json = {
+        product: '케겔운동기구',
+        exported_at: ts.toISOString(),
+        total_parts: parts.length,
+        colored_parts: applied.length,
+        colors: applied.map(m => {
+          const a = m.userData.applied; const rgb = hexToRgb(a.hex);
+          return { part: m.userData.partName, method: a.method, hex: a.hex, rgb, pantone: a.method==='PANTONE'? a.meta : null };
+        })
+      };
+      setTimeout(() => downloadFile(JSON.stringify(json, null, 2), `케겔운동기구_컬러명세_${stamp}.json`, 'application/json'), 300);
+      toast(`${applied.length}개 파트 명세 저장됨 (CSV+JSON)`);
+    }
+
+    // ───── Screenshot ─────
+    document.getElementById('screenshot-btn').addEventListener('click', () => {
+      renderer.render(scene, camera);
+      renderer.domElement.toBlob((blob) => {
+        const ts = new Date();
+        const stamp = `${ts.getFullYear()}${pad(ts.getMonth()+1)}${pad(ts.getDate())}_${pad(ts.getHours())}${pad(ts.getMinutes())}`;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = `케겔운동기구_컬러_${stamp}.png`; a.click();
+        URL.revokeObjectURL(url);
+      });
+      toast('스크린샷 저장됨');
+    });
+
+    // ───── Utils ─────
+    function clamp255(v){ v=parseInt(v)||0; return Math.max(0,Math.min(255,v)); }
+    function hexToRgb(h){ h=h.replace('#',''); return { r:parseInt(h.slice(0,2),16), g:parseInt(h.slice(2,4),16), b:parseInt(h.slice(4,6),16) }; }
+    function rgbToHex(r,g,b){ return '#' + [r,g,b].map(x=>x.toString(16).padStart(2,'0')).join('').toUpperCase(); }
+    function pad(n){ return String(n).padStart(2,'0'); }
+    function downloadFile(content, filename, type){
+      const blob = new Blob([content], {type}); const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href=url; a.download=filename; a.click(); URL.revokeObjectURL(url);
+    }
+    let toastTimer;
+    function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),1800); }
+
+    setPreview('#CCCCCC', 'HEX', '');
+
+    // ───── Animate ─────
+    (function animate(){ requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); })();
+    fitViewport();
+  </script>
+</body>
+</html>
