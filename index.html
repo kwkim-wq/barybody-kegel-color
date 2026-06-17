@@ -225,7 +225,7 @@
   </div>
 
   <div id="loading"><div class="spinner"></div><p id="loading-text">3D 모델 불러오는 중...</p></div>
-  <div id="hint">드래그: 회전 · 스크롤: 줌 · 우클릭드래그: 이동</div>
+  <div id="hint">드래그: 회전 · 스크롤: 줌 · 우클릭드래그: 이동 &nbsp;|&nbsp; 뷰 전환: 1 정면 · 2 위 · 3 우측 · 4 후면 · 5 좌측 · 6 입체</div>
   <div id="toast"></div>
 
   <script src="pantone.js"></script>
@@ -288,6 +288,8 @@
     const parts = [];          // {mesh, name, baseMat}
     const DEFAULT_COLOR = 0xc7c7cc;
     let modelHeight = 2;
+    const viewCenter = new THREE.Vector3(0, 1, 0);
+    let viewRadius = 5;
 
     loader.load('ski.glb', (gltf) => {
       const model = gltf.scene;
@@ -321,6 +323,10 @@
       controls.target.set(0, size2.y * 0.45, 0);
       camera.position.set(size2.x * 0.7, size2.y * 1.2, scaledMax * 1.4);
       controls.update();
+
+      // 뷰 프리셋용 파라미터 저장
+      viewCenter.set(0, size2.y * 0.45, 0);
+      viewRadius = scaledMax * 1.6;
 
       document.getElementById('loading').style.display = 'none';
       // 자동저장된 컬러 복원
@@ -685,8 +691,39 @@
 
     setPreview('#CCCCCC', 'HEX', '');
 
+    // ───── 뷰 전환 (숫자키) ─────
+    let camTarget = null, camLookTarget = null;
+    function setView(dir) {
+      const r = viewRadius;
+      const c = viewCenter;
+      camTarget = new THREE.Vector3(c.x + dir[0]*r, c.y + dir[1]*r, c.z + dir[2]*r);
+      camLookTarget = c.clone();
+    }
+    window.addEventListener('keydown', (e) => {
+      // 입력창에 포커스 있을 때는 무시
+      const tag = (document.activeElement && document.activeElement.tagName) || '';
+      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+      switch (e.code) {
+        case 'Digit1': case 'Numpad1': setView([0, 0.15, 1]);   toast('정면'); break;
+        case 'Digit2': case 'Numpad2': setView([0, 1, 0.001]);  toast('위'); break;
+        case 'Digit3': case 'Numpad3': setView([1, 0.15, 0]);   toast('우측면'); break;
+        case 'Digit4': case 'Numpad4': setView([0, 0.15, -1]);  toast('후면'); break;
+        case 'Digit5': case 'Numpad5': setView([-1, 0.15, 0]);  toast('좌측면'); break;
+        case 'Digit6': case 'Numpad6': setView([0.9, 0.7, 0.9]); toast('아이소메트릭'); break;
+      }
+    });
+
     // ───── Animate ─────
-    (function animate(){ requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); })();
+    (function animate(){
+      requestAnimationFrame(animate);
+      if (camTarget) {
+        camera.position.lerp(camTarget, 0.12);
+        controls.target.lerp(camLookTarget, 0.12);
+        if (camera.position.distanceTo(camTarget) < 0.02) camTarget = null;
+      }
+      controls.update();
+      renderer.render(scene, camera);
+    })();
     fitViewport();
   </script>
 </body>
