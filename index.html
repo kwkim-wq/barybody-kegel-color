@@ -110,6 +110,7 @@
 
     /* 저장 버튼 */
     #export-section { padding: 14px 18px; border-top: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2); }
+    #autosave-note { font-size: 10px; color: #46c98a; margin-bottom: 8px; text-align: center; }
     button.export {
       width: 100%; padding: 12px; font-size: 13px; font-weight: 700;
       background: #1ca672; color: #fff; border: none; border-radius: 7px; cursor: pointer; margin-bottom: 6px;
@@ -209,11 +210,17 @@
 
     <!-- 저장 -->
     <div id="export-section">
+      <div id="autosave-note">✓ 작업 내용은 자동 저장됩니다 (새로고침해도 유지)</div>
       <button class="export" id="export-btn">💾 컬러 명세 저장 (생산업체용)</button>
+      <div class="btn-row">
+        <button class="sec" id="save-work-btn">📁 작업 백업</button>
+        <button class="sec" id="load-work-btn">📂 작업 불러오기</button>
+      </div>
       <div class="btn-row">
         <button class="sec" id="screenshot-btn">📷 스크린샷</button>
         <button class="sec" id="reset-all-btn">전체 초기화</button>
       </div>
+      <input type="file" id="load-work-input" accept=".json" style="display:none">
     </div>
   </div>
 
@@ -315,7 +322,10 @@
       controls.update();
 
       document.getElementById('loading').style.display = 'none';
-      toast(`${parts.length}개 파트 로드 완료`);
+      // 자동저장된 컬러 복원
+      const restored = restoreFromStorage();
+      renderAppliedList();
+      toast(restored > 0 ? `${parts.length}개 파트 로드 · 저장된 컬러 ${restored}개 복원` : `${parts.length}개 파트 로드 완료`);
     }, (xhr) => {
       if (xhr.total) document.getElementById('loading-text').textContent =
         `불러오는 중... ${Math.round(xhr.loaded/xhr.total*100)}%`;
@@ -506,6 +516,7 @@
       list.innerHTML = '';
       const applied = parts.filter(m => m.userData.applied);
       num.textContent = applied.length ? `(${applied.length})` : '';
+      saveToStorage();   // 변경될 때마다 자동저장
       if (!applied.length) { empty.style.display = 'block'; return; }
       empty.style.display = 'none';
       applied.forEach(m => {
@@ -523,6 +534,40 @@
         });
         list.appendChild(el);
       });
+    }
+
+    // ───── 자동 저장 / 복원 (localStorage) ─────
+    const STORAGE_KEY = 'kegel_color_work_v1';
+    function saveToStorage() {
+      try {
+        const data = {};
+        parts.forEach(m => { if (m.userData.applied) data[m.userData.partName] = m.userData.applied; });
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      } catch(e) { console.warn('자동저장 실패', e); }
+    }
+    function restoreFromStorage() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return 0;
+        const data = JSON.parse(raw);
+        let n = 0;
+        parts.forEach(m => {
+          const a = data[m.userData.partName];
+          if (a && a.hex) { m.material.color = new THREE.Color(a.hex); m.userData.applied = a; n++; }
+        });
+        return n;
+      } catch(e) { console.warn('복원 실패', e); return 0; }
+    }
+    // 컬러 데이터를 객체로 적용 (불러오기용)
+    function applyColorMap(data) {
+      let n = 0;
+      parts.forEach(m => {
+        const a = data[m.userData.partName];
+        if (a && a.hex) { m.material.color = new THREE.Color(a.hex); m.userData.applied = a; n++; }
+        else { m.material.color = new THREE.Color(DEFAULT_COLOR); m.userData.applied = null; }
+      });
+      renderAppliedList();
+      return n;
     }
 
     function focusPart(m) {
@@ -564,6 +609,41 @@
       setTimeout(() => downloadFile(JSON.stringify(json, null, 2), `케겔운동기구_컬러명세_${stamp}.json`, 'application/json'), 300);
       toast(`${applied.length}개 파트 명세 저장됨 (CSV+JSON)`);
     }
+
+    // ───── 작업 백업 / 불러오기 (.json) ─────
+    document.getElementById('save-work-btn').addEventListener('click', () => {
+      const data = {};
+      parts.forEach(m => { if (m.userData.applied) data[m.userData.partName] = m.userData.applied; });
+      if (!Object.keys(data).length) { toast('저장할 작업이 없습니다'); return; }
+      const ts = new Date();
+      const stamp = `${ts.getFullYear()}${pad(ts.getMonth()+1)}${pad(ts.getDate())}_${pad(ts.getHours())}${pad(ts.getMinutes())}`;
+      const proj = { _type: 'kegel_color_work', product: '케겔운동기구', saved_at: ts.toISOString(), colors: data };
+      downloadFile(JSON.stringify(proj, null, 2), `케겔운동기구_작업백업_${stamp}.json`, 'application/json');
+      toast('작업 백업 파일 저장됨');
+    });
+
+    document.getElementById('load-work-btn').addEventListener('click', () => document.getElementById('load-work-input').click());
+    document.getElementById('load-work-input').addEventListener('change', (e) => {
+      const file = e.target.files[0]; if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const obj = JSON.parse(reader.result);
+          // 작업백업(.json) 또는 명세(.json) 둘 다 지원
+          let data = null;
+          if (obj.colors && !Array.isArray(obj.colors)) data = obj.colors;            // 작업백업 형식
+          else if (Array.isArray(obj.colors)) {                                         // 명세 형식
+            data = {};
+            obj.colors.forEach(c => { data[c.part] = { hex: c.hex, method: c.method, meta: c.pantone || c.hex }; });
+          }
+          if (!data) { toast('인식할 수 없는 파일입니다'); return; }
+          const n = applyColorMap(data);
+          toast(`${n}개 파트 컬러 불러옴`);
+        } catch(err) { toast('파일 읽기 실패'); console.error(err); }
+      };
+      reader.readAsText(file);
+      e.target.value = '';
+    });
 
     // ───── Screenshot ─────
     document.getElementById('screenshot-btn').addEventListener('click', () => {
